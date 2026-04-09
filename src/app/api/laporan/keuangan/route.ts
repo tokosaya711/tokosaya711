@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await authenticateRequest(request);
     if (!auth.success) return auth.response;
-    const { userId, role } = auth.user;
+    const { userId } = auth.user;
 
     const { searchParams } = new URL(request.url);
     const startDateParam = searchParams.get('startDate');
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), 0, 0, 0, 0);
     const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
 
-    // Fetch all transactions in date range
+    // Fetch all transactions in date range with items
     const transactions = await db.transaction.findMany({
       where: {
         createdAt: {
@@ -59,8 +59,36 @@ export async function GET(request: NextRequest) {
         },
         userId,
       },
+      include: {
+        items: {
+          include: {
+            product: {
+              select: { id: true, capitalPrice: true },
+            },
+          },
+        },
+      },
       orderBy: { createdAt: 'asc' },
     });
+
+    // Batch-fetch current capital prices from Product table
+    const productIds = new Set<string>();
+    for (const tx of transactions) {
+      for (const item of tx.items) {
+        productIds.add(item.productId);
+      }
+    }
+
+    const productPrices = new Map<string, number>();
+    if (productIds.size > 0) {
+      const products = await db.product.findMany({
+        where: { id: { in: Array.from(productIds) } },
+        select: { id: true, capitalPrice: true },
+      });
+      for (const p of products) {
+        productPrices.set(p.id, p.capitalPrice || 0);
+      }
+    }
 
     // Build daily breakdown
     const dailyMap = new Map<string, {
@@ -68,65 +96,79 @@ export async function GET(request: NextRequest) {
       pendapatan: number;
       diskon: number;
       pajak: number;
+      totalModal: number;
       labaKotor: number;
-      transactionCount: number;
+      jumlahTransaksi: number;
     }>();
 
     let totalPendapatan = 0;
     let totalDiskon = 0;
     let totalPajak = 0;
-    let labaKotor = 0;
+    let totalModal = 0;
 
     for (const tx of transactions) {
-      // Extract date string (YYYY-MM-DD) from createdAt
-      const txDate = new Date(tx.createdAt);
-      const dateStr = formatDateStr(txDate);
+      // Calculate modal for this transaction
+      let txModal = 0;
+      for (const item of tx.items) {
+        const capitalPrice = productPrices.get(item.productId) || 0;
+        txModal += capitalPrice * item.quantity;
+      }
+
+      const txPendapatan = tx.total; // actual money received
+      const txLabaKotor = txPendapatan - txModal;
 
       // Accumulate totals
-      totalPendapatan += tx.subtotal;
+      totalPendapatan += txPendapatan;
       totalDiskon += tx.discount;
       totalPajak += tx.tax;
-      // Laba kotor = subtotal - diskon + pajak (which equals total)
-      labaKotor += tx.total;
+      totalModal += txModal;
 
       // Accumulate daily
+      const txDate = new Date(tx.createdAt);
+      const dateStr = formatDateStr(txDate);
       const existing = dailyMap.get(dateStr);
+
       if (existing) {
-        existing.pendapatan += tx.subtotal;
+        existing.pendapatan += txPendapatan;
         existing.diskon += tx.discount;
         existing.pajak += tx.tax;
-        existing.labaKotor += tx.total;
-        existing.transactionCount += 1;
+        existing.totalModal += txModal;
+        existing.labaKotor += txLabaKotor;
+        existing.jumlahTransaksi += 1;
       } else {
         dailyMap.set(dateStr, {
           date: dateStr,
-          pendapatan: tx.subtotal,
+          pendapatan: txPendapatan,
           diskon: tx.discount,
           pajak: tx.tax,
-          labaKotor: tx.total,
-          transactionCount: 1,
+          totalModal: txModal,
+          labaKotor: txLabaKotor,
+          jumlahTransaksi: 1,
         });
       }
     }
 
+    const labaKotor = totalPendapatan - totalModal;
+
     // Convert map to sorted array by date
     const dailyBreakdown = Array.from(dailyMap.values())
       .map((entry) => ({
-        ...entry,
+        date: entry.date,
         pendapatan: Math.round(entry.pendapatan),
         diskon: Math.round(entry.diskon),
         pajak: Math.round(entry.pajak),
+        totalModal: Math.round(entry.totalModal),
         labaKotor: Math.round(entry.labaKotor),
+        jumlahTransaksi: entry.jumlahTransaksi,
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
     return NextResponse.json({
-      summary: {
-        totalPendapatan: Math.round(totalPendapatan),
-        totalDiskon: Math.round(totalDiskon),
-        totalPajak: Math.round(totalPajak),
-        labaKotor: Math.round(labaKotor),
-      },
+      totalPendapatan: Math.round(totalPendapatan),
+      totalDiskon: Math.round(totalDiskon),
+      totalPajak: Math.round(totalPajak),
+      totalModal: Math.round(totalModal),
+      labaKotor: Math.round(labaKotor),
       dailyBreakdown,
     });
   } catch {

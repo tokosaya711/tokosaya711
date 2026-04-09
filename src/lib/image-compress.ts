@@ -1,13 +1,12 @@
 /**
  * Client-side image compression utility.
- * Compresses images to max 300KB while maintaining clear quality.
+ * Compresses images to max 100KB, crops to square (fit to box).
  * Uses Canvas API for broad browser/mobile compatibility.
  * Falls back to original file if compression fails (e.g., HEIC not supported).
  */
 
-const MAX_FILE_SIZE = 300 * 1024; // 300KB
-const MAX_WIDTH = 1920;
-const MAX_HEIGHT = 1920;
+const MAX_FILE_SIZE = 100 * 1024; // 100KB
+const MAX_DIMENSION = 800;
 
 /**
  * Load an image from a File/Blob and return an HTMLImageElement.
@@ -50,107 +49,112 @@ function canvasToBlob(
 }
 
 /**
- * Compress a single image file to max 300KB using Canvas API.
+ * Compress a single image file to max 100KB and crop to square.
  *
  * Strategy:
- * 1. If file is already under 300KB, return as-is (no compression needed)
- * 2. Try Canvas-based JPEG compression
- * 3. If Canvas fails (HEIC, unsupported format), fall back to original file
+ * 1. If file is already under 100KB, still crop to square but keep as-is
+ * 2. Center-crop to square using the smaller dimension
+ * 3. Resize to max 800x800
+ * 4. Try JPEG compression with decreasing quality until ≤100KB
+ * 5. If Canvas fails (HEIC, unsupported format), fall back to original file
  *
  * @param file - The original image File from input/camera
- * @returns File ready for upload (compressed or original as fallback)
+ * @returns File ready for upload (compressed square or original as fallback)
  */
 export async function compressImage(file: File): Promise<File> {
-  // If already under 300KB, no compression needed at all
-  if (file.size <= MAX_FILE_SIZE) {
-    return file;
-  }
-
-  // Try Canvas-based compression
   try {
     const img = await loadImage(file);
 
-    // Calculate dimensions (maintain aspect ratio, cap at MAX)
+    // ── Step 1: Center-crop to square ──
     let { width, height } = img;
-    if (width > MAX_WIDTH || height > MAX_HEIGHT) {
-      const ratio = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height);
-      width = Math.round(width * ratio);
-      height = Math.round(height * ratio);
+    const size = Math.min(width, height);
+    const sx = Math.round((width - size) / 2);
+    const sy = Math.round((height - size) / 2);
+
+    // ── Step 2: Scale down if needed ──
+    let canvasSize = size;
+    if (canvasSize > MAX_DIMENSION) {
+      canvasSize = MAX_DIMENSION;
     }
 
-    // Create canvas and draw
+    // ── Step 3: Draw cropped square ──
     const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
+    canvas.width = canvasSize;
+    canvas.height = canvasSize;
     const ctx = canvas.getContext('2d');
 
     if (!ctx) {
-      // Canvas not available — return original file
       return file;
     }
 
-    // Use high quality rendering
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, 0, 0, width, height);
+    ctx.drawImage(img, sx, sy, size, size, 0, 0, canvasSize, canvasSize);
 
-    // Try JPEG compression with decreasing quality
-    let quality = 0.92;
+    // ── Step 4: If already under 100KB, export as-is ──
+    const initialBlob = await canvasToBlob(canvas, 'image/jpeg', 0.92);
+    if (initialBlob && initialBlob.size <= MAX_FILE_SIZE) {
+      const timestamp = Date.now();
+      const originalName = file.name.replace(/\.[^.]+$/, '') || 'image';
+      const compressedName = `${originalName}-${timestamp}.jpg`;
+      return new File([initialBlob], compressedName, { type: 'image/jpeg' });
+    }
+
+    // ── Step 5: Compress with decreasing quality ──
+    let quality = 0.85;
     let blob: Blob | null = null;
 
-    for (let attempt = 0; attempt < 8; attempt++) {
+    for (let attempt = 0; attempt < 10; attempt++) {
       blob = await canvasToBlob(canvas, 'image/jpeg', quality);
-
       if (blob && blob.size <= MAX_FILE_SIZE) {
         break;
       }
-
-      // Reduce quality step by step
-      quality -= 0.1;
+      quality -= 0.08;
       if (quality < 0.1) quality = 0.1;
     }
 
-    if (!blob) {
-      // Compression produced nothing — return original
-      return file;
-    }
+    // ── Step 6: If still over 100KB, scale down further ──
+    if (!blob || blob.size > MAX_FILE_SIZE) {
+      let scaleDown = 0.7;
+      for (let retry = 0; retry < 4; retry++) {
+        const smallerSize = Math.round(canvasSize * scaleDown);
+        const smallerCanvas = document.createElement('canvas');
+        smallerCanvas.width = smallerSize;
+        smallerCanvas.height = smallerSize;
+        const smallerCtx = smallerCanvas.getContext('2d');
+        if (smallerCtx) {
+          smallerCtx.imageSmoothingEnabled = true;
+          smallerCtx.imageSmoothingQuality = 'high';
+          smallerCtx.drawImage(canvas, 0, 0, smallerSize, smallerSize);
 
-    // If still over 300KB after quality reduction, try smaller dimensions
-    if (blob.size > MAX_FILE_SIZE) {
-      const scaleDown = 0.75;
-      const smallerCanvas = document.createElement('canvas');
-      smallerCanvas.width = Math.round(width * scaleDown);
-      smallerCanvas.height = Math.round(height * scaleDown);
-      const smallerCtx = smallerCanvas.getContext('2d');
-      if (smallerCtx) {
-        smallerCtx.imageSmoothingEnabled = true;
-        smallerCtx.imageSmoothingQuality = 'high';
-        smallerCtx.drawImage(canvas, 0, 0, smallerCanvas.width, smallerCanvas.height);
-
-        quality = 0.85;
-        for (let attempt = 0; attempt < 5; attempt++) {
-          const smallerBlob = await canvasToBlob(smallerCanvas, 'image/jpeg', quality);
-          if (smallerBlob && smallerBlob.size <= MAX_FILE_SIZE) {
-            blob = smallerBlob;
-            break;
+          quality = 0.75;
+          for (let attempt = 0; attempt < 8; attempt++) {
+            const smallerBlob = await canvasToBlob(smallerCanvas, 'image/jpeg', quality);
+            if (smallerBlob && smallerBlob.size <= MAX_FILE_SIZE) {
+              blob = smallerBlob;
+              break;
+            }
+            quality -= 0.08;
+            if (quality < 0.1) quality = 0.1;
           }
-          quality -= 0.1;
-          if (quality < 0.1) quality = 0.1;
+
+          if (blob && blob.size <= MAX_FILE_SIZE) break;
         }
+        scaleDown -= 0.1;
+        if (scaleDown < 0.3) scaleDown = 0.3;
       }
     }
 
-    // If compressed result is still over 500KB, just return original
-    if (blob && blob.size > 500 * 1024) {
+    if (!blob) {
       return file;
     }
 
     // Generate compressed filename
     const timestamp = Date.now();
     const originalName = file.name.replace(/\.[^.]+$/, '') || 'image';
-    const compressedName = `${originalName}-compressed-${timestamp}.jpg`;
+    const compressedName = `${originalName}-${timestamp}.jpg`;
 
-    return new File([blob!], compressedName, { type: 'image/jpeg' });
+    return new File([blob], compressedName, { type: 'image/jpeg' });
   } catch {
     // Canvas/Image failed (HEIC, unsupported format, etc.) — return original file as-is
     return file;

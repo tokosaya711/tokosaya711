@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuthStore } from '@/lib/auth-store';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { usePermission } from '@/hooks/use-permission';
@@ -95,12 +95,12 @@ export default function CategoriesPage() {
   const canAccessFoods = usePermission('foods');
   const canAccessSembako = usePermission('sembako');
 
-  // ── Allowed types based on role permissions ──
-  const allowedTypes = [
+  // ── Allowed types based on role permissions (memoized) ──
+  const allowedTypes = useMemo(() => [
     ...(canAccessCakes ? ['cake'] as const : []),
     ...(canAccessFoods ? ['food'] as const : []),
     ...(canAccessSembako ? ['sembako'] as const : []),
-  ];
+  ], [canAccessCakes, canAccessFoods, canAccessSembako]);
 
   // ── Default type for add form (first allowed type) ──
   const defaultType = allowedTypes[0] || 'cake';
@@ -143,24 +143,27 @@ export default function CategoriesPage() {
       });
       if (!res.ok) throw new Error('Gagal memuat kategori');
       const data: Category[] = await res.json();
-      // Filter to only allowed types based on permissions
-      setCategories(data.filter((c) => allowedTypes.includes(c.type)));
+      setCategories(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
     } finally {
       setLoading(false);
     }
-  }, [filterType, allowedTypes]);
+  }, [filterType]);
 
   useEffect(() => {
     fetchCategories(search);
   }, [fetchCategories]);
 
-  // ── Filtered categories (client-side search) ──
-  const filteredCategories = categories.filter((cat) => {
-    if (!search.trim()) return true;
-    return cat.name.toLowerCase().includes(search.toLowerCase());
-  });
+  // ── Filtered categories (client-side search + permission filter) ──
+  const filteredCategories = useMemo(() => {
+    return categories
+      .filter((c) => allowedTypes.includes(c.type))
+      .filter((cat) => {
+        if (!search.trim()) return true;
+        return cat.name.toLowerCase().includes(search.toLowerCase());
+      });
+  }, [categories, allowedTypes, search]);
 
   // ── Stats ──
   const totalCategories = categories.length;

@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "postinstall": "prisma generate",
-    "vercel-build": "prisma db push --skip-generate --accept-data-loss 2>/dev/null || true",
+    "vercel-build": "sh scripts/vercel-build.sh",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

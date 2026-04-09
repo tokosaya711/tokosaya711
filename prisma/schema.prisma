@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String          @id @default(cuid())
+  name          String
+  username      String          @unique @default("")
+  email         String          @unique
+  password      String
+  phone         String?
+  role          String          @default("user")
+  isActive      Boolean         @default(true)
+  isDemo        Boolean         @default(false)
+  demoExpiresAt DateTime?
+  isPembeli     Boolean         @default(false)
+  roles         String          @default("")
+  activeSessionId String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  transactions  Transaction[]
+  categories    Category[]
+  products      Product[]
+  customers     Customer[]
+  storeSettings StoreSettings[]
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String
+  type      String    @default("cake")
+  ownerId   String
+  owner     User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  products  Product[]
+  createdAt DateTime  @default(now())
+}
+
+model Product {
+  id              String            @id @default(cuid())
+  name            String
+  price           Float
+  capitalPrice    Float             @default(0)
+  stock           Int              @default(0)
+  stockStatus     String            @default("")
+  image           String?
+  categoryId      String
+  category        Category          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  ownerId         String
+  owner           User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  transactionItems TransactionItem[]
+}
+
+model Customer {
+  id           String        @id @default(cuid())
+  name         String
+  phone        String?
+  address      String?
+  notes        String?
+  ownerId      String
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Transaction {
+  id              String            @id @default(cuid())
+  invoiceNumber   String            @unique
+  userId          String
+  user            User              @relation(fields: [userId], references: [id])
+  customerId      String?
+  customer        Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  subtotal        Float
+  discount        Float             @default(0)
+  tax             Float             @default(0)
+  total           Float
+  paymentMethod   String
+  amountPaid      Float
+  change          Float             @default(0)
+  createdAt       DateTime          @default(now())
+  items           TransactionItem[]
+}
+
+model TransactionItem {
+  id            String      @id @default(cuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product     @relation(fields: [productId], references: [id])
+  productName   String
+  productPrice  Float
+  quantity      Int
+  subtotal      Float
+}
+
+model StoreSettings {
+  id                  String @id @default(cuid())
+  storeName           String @default("")
+  address             String @default("")
+  phone               String @default("")
+  storeLogo           String @default("")
+  taxRate             Float  @default(0)
+  receiptFooter       String @default("Terima kasih atas kunjungan Anda!")
+  demoPeriodDays      Int    @default(7)
+  demoPopupMessage    String @default("Selamat datang! Anda sedang menggunakan akun demo. Upgrade ke akun penuh untuk mengakses semua fitur.")
+  autoLogoutMinutes   Int    @default(30)
+  logoutWarningSeconds Int   @default(20)
+  singleDeviceLogin   Boolean @default(false)
+  features            String @default("{}")
+  customRoles         String @default("[]")
+  ownerId             String
+  owner               User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+}

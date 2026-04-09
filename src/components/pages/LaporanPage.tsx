@@ -267,6 +267,7 @@ function HarianTab() {
 
   const [date, setDate] = useState(getTodayString());
   const [transactions, setTransactions] = useState<DailyTransaction[]>([]);
+  const [summary, setSummary] = useState({ totalTransactions: 0, totalPenjualan: 0, totalModal: 0, profit: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -284,9 +285,11 @@ function HarianTab() {
       if (!res.ok) throw new Error('Gagal memuat laporan harian');
       const data = await res.json();
       setTransactions(data.transactions || []);
+      setSummary(data.summary || { totalTransactions: 0, totalPenjualan: 0, totalModal: 0, profit: 0 });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
       setTransactions([]);
+      setSummary({ totalTransactions: 0, totalPenjualan: 0, totalModal: 0, profit: 0 });
     } finally {
       setIsLoading(false);
     }
@@ -296,9 +299,10 @@ function HarianTab() {
     fetchData();
   }, [fetchData]);
 
-  const totalTransaksi = transactions.length;
-  const totalPenjualan = transactions.reduce((s, t) => s + t.total, 0);
-  const rataRata = totalTransaksi > 0 ? Math.round(totalPenjualan / totalTransaksi) : 0;
+  const totalTransaksi = summary.totalTransactions;
+  const totalPenjualan = summary.totalPenjualan;
+  const totalModal = summary.totalModal;
+  const totalProfit = summary.profit;
 
   return (
     <div className="space-y-4">
@@ -332,7 +336,7 @@ function HarianTab() {
 
       {/* Summary */}
       {!error && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard
             title="Total Transaksi"
             value={String(totalTransaksi)}
@@ -348,8 +352,15 @@ function HarianTab() {
             iconBgClass="bg-emerald-50 text-emerald-600"
           />
           <StatCard
-            title="Rata-rata per Transaksi"
-            value={formatRupiah(rataRata)}
+            title="Total Modal"
+            value={formatRupiah(totalModal)}
+            icon={<Receipt className="h-4 w-4 sm:h-5 sm:w-5" />}
+            accentClass="text-red-600"
+            iconBgClass="bg-red-50 text-red-500"
+          />
+          <StatCard
+            title="Total Profit"
+            value={formatRupiah(totalProfit)}
             icon={<DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />}
             accentClass="text-amber-700"
             iconBgClass="bg-amber-50 text-amber-600"
@@ -554,7 +565,7 @@ function MingguanTab() {
               iconBgClass="bg-red-50 text-red-500"
             />
             <StatCard
-              title="Laba Bersih"
+              title="Total Profit"
               value={formatRupiah(data.summary.profit)}
               icon={<DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />}
               accentClass="text-amber-700"
@@ -656,6 +667,7 @@ function BulananTab() {
   const [month, setMonth] = useState(String(now.getMonth() + 1));
   const [year, setYear] = useState(String(now.getFullYear()));
   const [transactions, setTransactions] = useState<MonthlyTransaction[]>([]);
+  const [summary, setSummary] = useState({ totalTransactions: 0, totalPenjualan: 0, totalModal: 0, profit: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -673,9 +685,11 @@ function BulananTab() {
       if (!res.ok) throw new Error('Gagal memuat laporan bulanan');
       const data = await res.json();
       setTransactions(data.transactions || []);
+      setSummary(data.summary || { totalTransactions: 0, totalPenjualan: 0, totalModal: 0, profit: 0 });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
       setTransactions([]);
+      setSummary({ totalTransactions: 0, totalPenjualan: 0, totalModal: 0, profit: 0 });
     } finally {
       setIsLoading(false);
     }
@@ -685,9 +699,10 @@ function BulananTab() {
     fetchData();
   }, [fetchData]);
 
-  const totalTransaksi = transactions.length;
-  const totalPenjualan = transactions.reduce((s, t) => s + t.total, 0);
-  const rataRata = totalTransaksi > 0 ? Math.round(totalPenjualan / totalTransaksi) : 0;
+  const totalTransaksi = summary.totalTransactions;
+  const totalPenjualan = summary.totalPenjualan;
+  const totalModal = summary.totalModal;
+  const totalProfit = summary.profit;
 
   const monthNames = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -742,7 +757,7 @@ function BulananTab() {
 
       {/* Summary */}
       {!error && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard
             title="Total Transaksi"
             value={String(totalTransaksi)}
@@ -758,8 +773,15 @@ function BulananTab() {
             iconBgClass="bg-emerald-50 text-emerald-600"
           />
           <StatCard
-            title="Rata-rata per Transaksi"
-            value={formatRupiah(rataRata)}
+            title="Total Modal"
+            value={formatRupiah(totalModal)}
+            icon={<Receipt className="h-4 w-4 sm:h-5 sm:w-5" />}
+            accentClass="text-red-600"
+            iconBgClass="bg-red-50 text-red-500"
+          />
+          <StatCard
+            title="Total Profit"
+            value={formatRupiah(totalProfit)}
             icon={<DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />}
             accentClass="text-amber-700"
             iconBgClass="bg-amber-50 text-amber-600"
@@ -967,7 +989,7 @@ function TriwulanTab() {
               iconBgClass="bg-red-50 text-red-500"
             />
             <StatCard
-              title="Laba Bersih"
+              title="Total Profit"
               value={formatRupiah(data.summary.profit)}
               icon={<DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />}
               accentClass="text-amber-700"

@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
         items: {
           include: {
             product: {
-              select: { id: true, name: true, category: { select: { id: true, name: true } } },
+              select: { id: true, name: true, capitalPrice: true, category: { select: { id: true, name: true } } },
             },
           },
         },
@@ -69,16 +69,46 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
+    // Collect product IDs for batch fetch of capital prices
+    const productIds = new Set<string>();
+    for (const tx of transactions) {
+      for (const item of tx.items) {
+        productIds.add(item.productId);
+      }
+    }
+
+    const productPrices = new Map<string, number>();
+    if (productIds.size > 0) {
+      const products = await db.product.findMany({
+        where: { id: { in: Array.from(productIds) } },
+        select: { id: true, capitalPrice: true },
+      });
+      for (const p of products) {
+        productPrices.set(p.id, p.capitalPrice || 0);
+      }
+    }
+
     const totalTransactions = transactions.length;
     const totalPenjualan = transactions.reduce((sum, tx) => sum + tx.total, 0);
-    const rataRata = totalTransactions > 0 ? Math.round(totalPenjualan / totalTransactions) : 0;
+
+    // Calculate total modal (HPP)
+    let totalModal = 0;
+    for (const tx of transactions) {
+      for (const item of tx.items) {
+        const capitalPrice = productPrices.get(item.productId) || 0;
+        totalModal += capitalPrice * item.quantity;
+      }
+    }
+
+    const profit = totalPenjualan - totalModal;
 
     return NextResponse.json({
       transactions,
       summary: {
         totalTransactions,
         totalPenjualan: Math.round(totalPenjualan),
-        rataRata,
+        totalModal: Math.round(totalModal),
+        profit: Math.round(profit),
       },
     });
   } catch {

@@ -17,6 +17,17 @@ import {
   Layers,
   ChevronLeft,
   ChevronRight,
+  Plus,
+  Trash2,
+  Users,
+  Zap,
+  Droplets,
+  Shield,
+  Sparkles,
+  Building2,
+  CreditCard,
+  Truck,
+  MoreHorizontal,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -173,6 +184,7 @@ interface FinancialSummary {
   totalPendapatan: number;
   totalDiskon: number;
   totalPajak: number;
+  totalModal: number;
   labaKotor: number;
   dailyBreakdown: {
     date: string;
@@ -1091,12 +1103,69 @@ function KeuanganTab() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Expense state
+  interface ExpenseEntry {
+    id?: string;
+    category: string;
+    name: string;
+    amount: number;
+    isTemp?: boolean;
+  }
+
+  const [expenses, setExpenses] = useState<ExpenseEntry[]>([]);
+  const [isExpensesLoading, setIsExpensesLoading] = useState(false);
+  const [isSavingExpenses, setIsSavingExpenses] = useState(false);
+  const [expensesError, setExpensesError] = useState('');
+
   const authHeaders = useMemo(
     () => ({ headers: { Authorization: `Bearer ${token}` } }),
     [token]
   );
 
-  const fetchData = useCallback(async () => {
+  // Derive month & year from startDate
+  const derivedMonth = useMemo(() => {
+    if (!startDate) return new Date().getMonth() + 1;
+    return parseInt(startDate.split('-')[1], 10);
+  }, [startDate]);
+
+  const derivedYear = useMemo(() => {
+    if (!startDate) return new Date().getFullYear();
+    return parseInt(startDate.split('-')[0], 10);
+  }, [startDate]);
+
+  // Category definitions
+  const CATEGORIES = useMemo(
+    () => [
+      { key: 'gaji_karyawan', label: 'Gaji & Uang Makan Karyawan', icon: <Users className="size-4" />, multiple: true },
+      { key: 'listrik', label: 'Biaya Listrik', icon: <Zap className="size-4" />, multiple: false },
+      { key: 'air', label: 'Biaya Air', icon: <Droplets className="size-4" />, multiple: false },
+      { key: 'keamanan', label: 'Keamanan', icon: <Shield className="size-4" />, multiple: false },
+      { key: 'kebersihan', label: 'Kebersihan', icon: <Sparkles className="size-4" />, multiple: false },
+      { key: 'sewa_tempat', label: 'Sewa Tempat', icon: <Building2 className="size-4" />, multiple: false },
+      { key: 'service_charge', label: 'Service Charge', icon: <CreditCard className="size-4" />, multiple: false },
+      { key: 'transportasi', label: 'Transportasi', icon: <Truck className="size-4" />, multiple: false },
+      { key: 'lain_lain', label: 'Biaya Lain-lain', icon: <MoreHorizontal className="size-4" />, multiple: true },
+    ],
+    []
+  );
+
+  // Compute total per category
+  const getCategoryTotal = useCallback(
+    (categoryKey: string) => {
+      return expenses
+        .filter((e) => e.category === categoryKey && e.amount > 0)
+        .reduce((sum, e) => sum + e.amount, 0);
+    },
+    [expenses]
+  );
+
+  // Total biaya operasional
+  const totalBiayaOperasional = useMemo(() => {
+    return expenses.filter((e) => e.amount > 0).reduce((sum, e) => sum + e.amount, 0);
+  }, [expenses]);
+
+  // Fetch financial data
+  const fetchFinancialData = useCallback(async () => {
     if (!token) return;
     try {
       setIsLoading(true);
@@ -1116,13 +1185,164 @@ function KeuanganTab() {
     }
   }, [token, startDate, endDate, authHeaders]);
 
+  // Fetch expenses
+  const fetchExpenses = useCallback(async () => {
+    if (!token) return;
+    try {
+      setIsExpensesLoading(true);
+      setExpensesError('');
+      const res = await fetch(
+        `/api/pengeluaran?month=${derivedMonth}&year=${derivedYear}`,
+        authHeaders
+      );
+      if (!res.ok) throw new Error('Gagal memuat data pengeluaran');
+      const data = await res.json();
+      setExpenses(
+        (data.expenses || []).map((e: { id: string; category: string; name: string; amount: number }) => ({
+          id: e.id,
+          category: e.category,
+          name: e.name || '',
+          amount: e.amount || 0,
+        }))
+      );
+    } catch (err) {
+      setExpensesError(err instanceof Error ? err.message : 'Terjadi kesalahan');
+    } finally {
+      setIsExpensesLoading(false);
+    }
+  }, [token, derivedMonth, derivedYear, authHeaders]);
+
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchFinancialData();
+  }, [fetchFinancialData]);
+
+  useEffect(() => {
+    fetchExpenses();
+  }, [fetchExpenses]);
+
+  // Add empty row for multi-entry category
+  const addExpenseRow = useCallback((category: string) => {
+    setExpenses((prev) => [
+      ...prev,
+      { category, name: '', amount: 0, isTemp: true },
+    ]);
+  }, []);
+
+  // Remove expense entry
+  const removeExpenseEntry = useCallback(
+    async (index: number) => {
+      const entry = expenses[index];
+      // If it has an id, delete from server
+      if (entry.id) {
+        try {
+          const res = await fetch('/api/pengeluaran', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ id: entry.id }),
+          });
+          if (!res.ok) throw new Error('Gagal menghapus pengeluaran');
+        } catch {
+          return;
+        }
+      }
+      setExpenses((prev) => prev.filter((_, i) => i !== index));
+    },
+    [expenses, token]
+  );
+
+  // Update expense entry field
+  const updateExpenseEntry = useCallback((index: number, field: 'name' | 'amount', value: string | number) => {
+    setExpenses((prev) =>
+      prev.map((e, i) => {
+        if (i !== index) return e;
+        return { ...e, [field]: value };
+      })
+    );
+  }, []);
+
+  // Save all expenses
+  const saveExpenses = useCallback(async () => {
+    if (!token) return;
+    try {
+      setIsSavingExpenses(true);
+      setExpensesError('');
+
+      // Get entries that need to be saved (have amount > 0 and no id, or updated amounts)
+      const entriesToSave = expenses.filter((e) => e.amount > 0);
+      const entriesToDelete = expenses.filter((e) => e.id && e.amount <= 0);
+
+      // Delete zeroed entries that existed on server
+      for (const entry of entriesToDelete) {
+        if (entry.id) {
+          await fetch('/api/pengeluaran', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ id: entry.id }),
+          });
+        }
+      }
+
+      // Save/update entries with amount > 0
+      for (const entry of entriesToSave) {
+        if (entry.id) {
+          // Delete old and recreate (simplest approach since no PUT endpoint)
+          await fetch('/api/pengeluaran', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ id: entry.id }),
+          });
+        }
+        await fetch('/api/pengeluaran', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            category: entry.category,
+            name: entry.name,
+            amount: entry.amount,
+            month: derivedMonth,
+            year: derivedYear,
+          }),
+        });
+      }
+
+      // Refresh expenses
+      await fetchExpenses();
+    } catch (err) {
+      setExpensesError(err instanceof Error ? err.message : 'Gagal menyimpan pengeluaran');
+    } finally {
+      setIsSavingExpenses(false);
+    }
+  }, [token, expenses, derivedMonth, derivedYear, fetchExpenses]);
+
+  // Laba bersih
+  const labaBersih = useMemo(() => {
+    if (!financialData) return 0;
+    return financialData.labaKotor - totalBiayaOperasional;
+  }, [financialData, totalBiayaOperasional]);
 
   return (
     <div className="space-y-4">
-      {/* Filter */}
+      {/* Header Title */}
+      <div>
+        <h2 className="text-lg sm:text-xl font-bold text-neutral-900">Laporan Keuangan Sederhana</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Ringkasan pendapatan, modal, laba, dan biaya operasional
+        </p>
+      </div>
+
+      {/* Date Filter */}
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-3">
@@ -1148,7 +1368,7 @@ function KeuanganTab() {
                 className="h-10"
               />
             </div>
-            <Button onClick={fetchData} variant="outline" className="gap-2 h-10" disabled={isLoading}>
+            <Button onClick={fetchFinancialData} variant="outline" className="gap-2 h-10" disabled={isLoading}>
               {isLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
               {isMobile ? 'Refresh' : 'Tampilkan'}
             </Button>
@@ -1157,150 +1377,265 @@ function KeuanganTab() {
       </Card>
 
       {/* Error */}
-      {error && <ErrorState message={error} onRetry={fetchData} />}
+      {error && <ErrorState message={error} onRetry={fetchFinancialData} />}
+      {expensesError && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="flex items-center gap-3 p-4">
+            <AlertCircle className="size-5 text-amber-500 shrink-0" />
+            <p className="text-sm text-amber-700 flex-1">{expensesError}</p>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Summary Cards */}
+      {/* Loading */}
       {!error && isLoading && <LoadingSpinner />}
+      {!error && isExpensesLoading && expenses.length === 0 && <LoadingSpinner message="Memuat data pengeluaran..." />}
 
-      {!error && !isLoading && financialData && (
+      {/* Financial Summary & Expense Management */}
+      {!error && !isLoading && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <StatCard
-              title="Total Pendapatan"
-              value={formatRupiah(financialData.totalPendapatan)}
+              title="Pendapatan"
+              value={formatRupiah(financialData?.totalPendapatan ?? 0)}
               icon={<TrendingUp className="h-4 w-4 sm:h-5 sm:w-5" />}
               accentClass="text-emerald-700"
               iconBgClass="bg-emerald-50 text-emerald-600"
             />
             <StatCard
-              title="Total Diskon"
-              value={formatRupiah(financialData.totalDiskon)}
+              title="Total Modal"
+              value={formatRupiah(financialData?.totalModal ?? 0)}
+              icon={<ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5" />}
+              accentClass="text-orange-700"
+              iconBgClass="bg-orange-50 text-orange-600"
+            />
+            <StatCard
+              title="Laba Kotor"
+              value={formatRupiah(financialData?.labaKotor ?? 0)}
+              icon={<DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />}
+              accentClass="text-amber-700"
+              iconBgClass="bg-amber-50 text-amber-600"
+            />
+            <StatCard
+              title="Total Biaya Operasional"
+              value={formatRupiah(totalBiayaOperasional)}
               icon={<Receipt className="h-4 w-4 sm:h-5 sm:w-5" />}
               accentClass="text-red-600"
               iconBgClass="bg-red-50 text-red-500"
             />
             <StatCard
-              title="Total Pajak"
-              value={formatRupiah(financialData.totalPajak)}
+              title="Laba Bersih"
+              value={formatRupiah(labaBersih)}
               icon={<FileText className="h-4 w-4 sm:h-5 sm:w-5" />}
-              accentClass="text-blue-700"
-              iconBgClass="bg-blue-50 text-blue-600"
-            />
-            <StatCard
-              title="Laba Kotor"
-              value={formatRupiah(financialData.labaKotor)}
-              icon={<DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />}
-              accentClass="text-amber-700"
-              iconBgClass="bg-amber-50 text-amber-600"
+              accentClass={labaBersih >= 0 ? 'text-emerald-700' : 'text-red-600'}
+              iconBgClass={labaBersih >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}
             />
           </div>
 
-          {/* Financial Summary Card */}
-          <Card className="border-blue-200 bg-blue-50/30">
-            <CardContent className="p-4 sm:p-6 space-y-3">
-              <p className="text-sm font-semibold text-neutral-800">Ringkasan Keuangan</p>
-              <Separator />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-8 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Pendapatan</span>
-                  <span className="font-semibold text-emerald-700">
-                    {formatRupiah(financialData.totalPendapatan)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Diskon</span>
-                  <span className="font-semibold text-red-600">
-                    -{formatRupiah(financialData.totalDiskon)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Pajak</span>
-                  <span className="font-semibold">{formatRupiah(financialData.totalPajak)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Laba Kotor</span>
-                  <span className="font-bold text-blue-700">
-                    {formatRupiah(financialData.labaKotor)}
-                  </span>
-                </div>
-              </div>
-              <Separator />
-              <p className="text-xs text-muted-foreground">
-                * Laba Kotor = Pendapatan - Diskon
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Daily Breakdown Table */}
-          {financialData.dailyBreakdown && financialData.dailyBreakdown.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base font-semibold">Rincian Harian</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <ScrollArea className="max-h-96">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-neutral-50/80 hover:bg-neutral-50/80">
-                          <TableHead className="w-[60px] text-center">No</TableHead>
-                          <TableHead className="w-[120px]">Tanggal</TableHead>
-                          <TableHead className="text-right">Pendapatan</TableHead>
-                          <TableHead className={isMobile ? 'hidden md:table-cell text-right' : 'text-right'}>
-                            Diskon
-                          </TableHead>
-                          <TableHead className={isMobile ? 'hidden md:table-cell text-right' : 'text-right'}>
-                            Pajak
-                          </TableHead>
-                          <TableHead className="text-right">Laba Kotor</TableHead>
-                          <TableHead className={isMobile ? 'hidden sm:table-cell text-center' : 'text-center'}>
-                            Transaksi
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {financialData.dailyBreakdown.map((day, idx) => (
-                          <TableRow key={day.date}>
-                            <TableCell className="text-center text-sm text-muted-foreground">
-                              {idx + 1}
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-sm">{formatDate(day.date)}</span>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <span className="text-sm font-semibold text-emerald-700">
-                                {formatRupiah(day.pendapatan)}
-                              </span>
-                            </TableCell>
-                            <TableCell className={isMobile ? 'hidden md:table-cell text-right' : 'text-right'}>
-                              <span className="text-sm text-red-600">
-                                {day.diskon > 0 ? `-${formatRupiah(day.diskon)}` : '-'}
-                              </span>
-                            </TableCell>
-                            <TableCell className={isMobile ? 'hidden md:table-cell text-right' : 'text-right'}>
-                              <span className="text-sm text-muted-foreground">
-                                {day.pajak > 0 ? formatRupiah(day.pajak) : '-'}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <span className="text-sm font-bold text-blue-700">
-                                {formatRupiah(day.labaKotor)}
-                              </span>
-                            </TableCell>
-                            <TableCell className={isMobile ? 'hidden sm:table-cell text-center' : 'text-center'}>
-                              <Badge variant="secondary" className="text-xs">
-                                {day.jumlahTransaksi}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+          {/* Financial Summary Detail Card */}
+          {financialData && (
+            <Card className="border-neutral-200">
+              <CardContent className="p-4 sm:p-6 space-y-3">
+                <p className="text-sm font-semibold text-neutral-800">Laporan Keuangan Sederhana</p>
+                <Separator />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-8 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Pendapatan</span>
+                    <span className="font-semibold text-emerald-700">
+                      {formatRupiah(financialData.totalPendapatan)}
+                    </span>
                   </div>
-                </ScrollArea>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total Modal</span>
+                    <span className="font-semibold text-orange-700">
+                      {formatRupiah(financialData.totalModal)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Laba Kotor</span>
+                    <span className="font-bold text-amber-700">
+                      {formatRupiah(financialData.labaKotor)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total Biaya Operasional</span>
+                    <span className="font-semibold text-red-600">
+                      -{formatRupiah(totalBiayaOperasional)}
+                    </span>
+                  </div>
+                  <Separator className="sm:col-span-2" />
+                  <div className="flex justify-between sm:col-span-2">
+                    <span className="font-semibold text-neutral-900">Laba Bersih</span>
+                    <span className={`font-bold text-lg ${labaBersih >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                      {formatRupiah(labaBersih)}
+                    </span>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           )}
+
+          {/* ── Biaya Operasional Section ── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <Receipt className="size-4 text-red-500" />
+                  Biaya Operasional
+                </CardTitle>
+                <span className="text-sm font-bold text-red-600">
+                  {formatRupiah(totalBiayaOperasional)}
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 pt-0 space-y-5">
+              {CATEGORIES.map((cat, catIdx) => {
+                const catEntries = expenses.filter((e) => e.category === cat.key);
+                const catTotal = getCategoryTotal(cat.key);
+                const isLastCat = catIdx === CATEGORIES.length - 1;
+
+                if (cat.multiple) {
+                  return (
+                    <div key={cat.key} className="space-y-2">
+                      {/* Category header */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-100 text-neutral-600">
+                            {cat.icon}
+                          </div>
+                          <span className="text-sm font-medium text-neutral-700">{cat.label}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-neutral-900">{formatRupiah(catTotal)}</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                            onClick={() => addExpenseRow(cat.key)}
+                          >
+                            <Plus className="size-4" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Multi-entry rows */}
+                      <div className="space-y-1.5 pl-9">
+                        {catEntries.map((entry, idx) => {
+                          const globalIndex = expenses.indexOf(entry);
+                          return (
+                            <div
+                              key={entry.id || `temp-${cat.key}-${idx}`}
+                              className="flex items-center gap-2"
+                            >
+                              <Input
+                                type="text"
+                                placeholder="Nama"
+                                value={entry.name}
+                                onChange={(e) => updateExpenseEntry(globalIndex, 'name', e.target.value)}
+                                className="h-8 text-sm flex-1"
+                              />
+                              <div className="relative flex-1">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                                  Rp
+                                </span>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  placeholder="0"
+                                  value={entry.amount > 0 ? entry.amount : ''}
+                                  onChange={(e) =>
+                                    updateExpenseEntry(globalIndex, 'amount', parseFloat(e.target.value) || 0)
+                                  }
+                                  className="h-8 text-sm text-right pl-8"
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-red-400 hover:text-red-600 hover:bg-red-50 shrink-0"
+                                onClick={() => removeExpenseEntry(globalIndex)}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            </div>
+                          );
+                        })}
+                        {catEntries.length === 0 && (
+                          <p className="text-xs text-muted-foreground italic py-1">
+                            Belum ada entri. Klik + untuk menambahkan.
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Separator between categories */}
+                      {!isLastCat && <Separator />}
+                    </div>
+                  );
+                }
+
+                // Single-entry category
+                return (
+                  <div key={cat.key} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-100 text-neutral-600">
+                          {cat.icon}
+                        </div>
+                        <span className="text-sm font-medium text-neutral-700">{cat.label}</span>
+                      </div>
+                    </div>
+                    <div className="pl-9">
+                      <div className="relative max-w-xs">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                          Rp
+                        </span>
+                        <Input
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          value={catEntries.length > 0 && catEntries[0].amount > 0 ? catEntries[0].amount : ''}
+                          onChange={(e) => {
+                            const amount = parseFloat(e.target.value) || 0;
+                            if (catEntries.length > 0) {
+                              const globalIndex = expenses.indexOf(catEntries[0]);
+                              updateExpenseEntry(globalIndex, 'amount', amount);
+                            } else {
+                              // Add new entry
+                              setExpenses((prev) => [
+                                ...prev,
+                                { category: cat.key, name: '', amount, isTemp: true },
+                              ]);
+                            }
+                          }}
+                          className="h-8 text-sm text-right pl-8"
+                        />
+                      </div>
+                    </div>
+                    {!isLastCat && <Separator />}
+                  </div>
+                );
+              })}
+
+              {/* Save Button */}
+              <div className="flex justify-end pt-2">
+                <Button
+                  onClick={saveExpenses}
+                  disabled={isSavingExpenses || isExpensesLoading}
+                  className="gap-2"
+                >
+                  {isSavingExpenses ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Receipt className="size-4" />
+                  )}
+                  Simpan Pengeluaran
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </>
       )}
 

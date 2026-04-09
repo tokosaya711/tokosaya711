@@ -28,6 +28,7 @@ model User {
   products      Product[]
   customers     Customer[]
   storeSettings StoreSettings[]
+  expenses      OperationalExpense[]
 }
 
 model Category {
@@ -99,6 +100,19 @@ model TransactionItem {
   productPrice  Float
   quantity      Int
   subtotal      Float
+}
+
+model OperationalExpense {
+  id        String   @id @default(cuid())
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  category  String   // gaji_karyawan, listrik, air, keamanan, kebersihan, sewa_tempat, service_charge, transportasi, lain_lain
+  name      String   @default("")
+  amount    Float
+  month     Int      // 1-12
+  year      Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model StoreSettings {

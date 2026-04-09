@@ -359,7 +359,7 @@ function HarianTab() {
             iconBgClass="bg-red-50 text-red-500"
           />
           <StatCard
-            title="Total Profit"
+            title="Laba Kotor"
             value={formatRupiah(totalProfit)}
             icon={<DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />}
             accentClass="text-amber-700"
@@ -565,7 +565,7 @@ function MingguanTab() {
               iconBgClass="bg-red-50 text-red-500"
             />
             <StatCard
-              title="Total Profit"
+              title="Laba Kotor"
               value={formatRupiah(data.summary.profit)}
               icon={<DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />}
               accentClass="text-amber-700"
@@ -780,7 +780,7 @@ function BulananTab() {
             iconBgClass="bg-red-50 text-red-500"
           />
           <StatCard
-            title="Total Profit"
+            title="Laba Kotor"
             value={formatRupiah(totalProfit)}
             icon={<DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />}
             accentClass="text-amber-700"
@@ -989,7 +989,7 @@ function TriwulanTab() {
               iconBgClass="bg-red-50 text-red-500"
             />
             <StatCard
-              title="Total Profit"
+              title="Laba Kotor"
               value={formatRupiah(data.summary.profit)}
               icon={<DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />}
               accentClass="text-amber-700"

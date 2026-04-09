@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
       // Get demo period from settings
       let settings = await db.storeSettings.findFirst();
       if (!settings) {
-        settings = await db.storeSettings.create({ data: {} });
+        settings = await db.storeSettings.create({ data: { ownerId: userId } });
       }
       const demoPeriodDays = settings.demoPeriodDays || 7;
       const demoExpiresAt = new Date();

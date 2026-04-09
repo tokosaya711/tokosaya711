@@ -398,7 +398,7 @@ export default function StockPage() {
             <CardContent className="flex items-center gap-3 p-4">
               <AlertCircle className="size-5 text-red-500 shrink-0" />
               <p className="text-sm text-red-700">{loadError}</p>
-              <Button variant="outline" size="sm" onClick={loadData} className="ml-auto">
+              <Button variant="outline" size="sm" onClick={() => loadData()} className="ml-auto">
                 Coba Lagi
               </Button>
             </CardContent>

@@ -158,7 +158,7 @@ export default function CategoriesPage() {
   // ── Filtered categories (client-side search + permission filter) ──
   const filteredCategories = useMemo(() => {
     return categories
-      .filter((c) => allowedTypes.includes(c.type))
+      .filter((c) => (allowedTypes as string[]).includes(c.type))
       .filter((cat) => {
         if (!search.trim()) return true;
         return cat.name.toLowerCase().includes(search.toLowerCase());

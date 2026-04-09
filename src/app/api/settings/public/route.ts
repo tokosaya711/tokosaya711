@@ -7,7 +7,9 @@ export async function GET() {
   try {
     let settings = await db.storeSettings.findFirst();
     if (!settings) {
-      settings = await db.storeSettings.create({ data: {} });
+      const adminUser = await db.user.findFirst({ where: { role: 'admin', isActive: true }, select: { id: true } });
+      const ownerId = adminUser?.id || 'default';
+      settings = await db.storeSettings.create({ data: { ownerId } });
     }
     return NextResponse.json({
       storeName: settings.storeName,

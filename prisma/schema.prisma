@@ -29,6 +29,7 @@ model User {
   customers     Customer[]
   storeSettings StoreSettings[]
   expenses      OperationalExpense[]
+  karyawan      Karyawan[]
 }
 
 model Category {
@@ -102,6 +103,18 @@ model TransactionItem {
   subtotal      Float
 }
 
+model Karyawan {
+  id              String   @id @default(cuid())
+  ownerId         String
+  owner           User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  bagian          String
+  totalGaji       Float    @default(0)
+  totalUangMakan  Float    @default(0)
+  mulaiBekerja    String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
 model OperationalExpense {
   id        String   @id @default(cuid())
   ownerId   String
@@ -116,20 +129,30 @@ model OperationalExpense {
 }
 
 model StoreSettings {
-  id                  String @id @default(cuid())
-  storeName           String @default("")
-  address             String @default("")
-  phone               String @default("")
-  storeLogo           String @default("")
-  taxRate             Float  @default(0)
-  receiptFooter       String @default("Terima kasih atas kunjungan Anda!")
-  demoPeriodDays      Int    @default(7)
-  demoPopupMessage    String @default("Selamat datang! Anda sedang menggunakan akun demo. Upgrade ke akun penuh untuk mengakses semua fitur.")
-  autoLogoutMinutes   Int    @default(30)
-  logoutWarningSeconds Int   @default(20)
+  id                  String  @id @default(cuid())
+  storeName           String  @default("")
+  address             String  @default("")
+  phone               String  @default("")
+  storeLogo           String  @default("")
+  taxRate             Float   @default(0)
+  receiptFooter       String  @default("Terima kasih atas kunjungan Anda!")
+  demoPeriodDays      Int     @default(7)
+  demoPopupMessage    String  @default("Selamat datang! Anda sedang menggunakan akun demo. Upgrade ke akun penuh untuk mengakses semua fitur.")
+  autoLogoutMinutes   Int     @default(30)
+  logoutWarningSeconds Int    @default(20)
   singleDeviceLogin   Boolean @default(false)
-  features            String @default("{}")
-  customRoles         String @default("[]")
+  features            String  @default("{}")
+  customRoles         String  @default("[]")
+  jumlahKaryawan      Int     @default(0)
+  gajiPerKaryawan     Float   @default(0)
+  biayaListrik        Float   @default(0)
+  biayaSewa           Float   @default(0)
+  biayaAir            Float   @default(0)
+  biayaTransportasi   Float   @default(0)
+  biayaKeamanan       Float   @default(0)
+  biayaKebersihan     Float   @default(0)
+  biayaServiceCharge  Float   @default(0)
+  biayaLainLain       Float   @default(0)
   ownerId             String
-  owner               User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner               User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 }

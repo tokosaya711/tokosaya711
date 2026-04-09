@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
     const profit = totalPenjualan - totalModal;
 
     // Build daily breakdown for all 7 days (Mon-Sun)
-    const dailyBreakdown = [];
+    const dailyBreakdown: { date: string; dayName: string; totalTransactions: number; totalPenjualan: number; totalModal: number; profit: number }[] = [];
     for (let i = 0; i < 7; i++) {
       const dayDate = new Date(
         monday.getFullYear(),

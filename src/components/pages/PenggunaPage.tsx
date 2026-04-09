@@ -728,7 +728,7 @@ export default function PenggunaPage() {
                 <CardContent className="flex items-center gap-3 p-4">
                   <AlertCircle className="size-5 text-red-500 shrink-0" />
                   <p className="text-sm text-red-700">{loadError}</p>
-                  <Button variant="outline" size="sm" onClick={loadUsers} className="ml-auto shrink-0">
+                  <Button variant="outline" size="sm" onClick={() => loadUsers()} className="ml-auto shrink-0">
                     Coba Lagi
                   </Button>
                 </CardContent>

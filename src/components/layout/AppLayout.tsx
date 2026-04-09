@@ -422,6 +422,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               useAuthStore.getState().login(token, {
                 id: meData.id,
                 name: meData.name,
+                username: meData.username || '',
                 email: meData.email,
                 role: meData.role,
                 isDemo: meData.isDemo,

@@ -14,7 +14,6 @@ import {
   TrendingUp,
   ShoppingCart,
   Package,
-  BarChart3,
   X,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -280,8 +279,7 @@ export default function DashboardPage() {
     return (
       <div className="space-y-3 sm:space-y-6 overflow-x-hidden">
         {/* Stat cards */}
-        <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
-          <StatCardSkeleton />
+        <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">
           <StatCardSkeleton />
           <StatCardSkeleton />
           <StatCardSkeleton />
@@ -304,11 +302,6 @@ export default function DashboardPage() {
   if (!dashboard) return null;
 
   // ── Computed Values ─────────────────────────────────────────────────────
-
-  const avgPerTransaction =
-    dashboard.todayTransactions > 0
-      ? Math.round(dashboard.todaySales / dashboard.todayTransactions)
-      : 0;
 
   // Format daily sales data for chart
   const chartData = dashboard.dailySales.map((item) => ({
@@ -345,7 +338,7 @@ export default function DashboardPage() {
 
       {/* ── Stat Cards ──────────────────────────────────────────────────── */}
       {canViewStats && (
-      <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">
         <StatCard
           title="Penjualan Hari Ini"
           value={formatRupiah(dashboard.todaySales)}
@@ -369,14 +362,6 @@ export default function DashboardPage() {
           accentClass="text-purple-600"
           iconBgClass="bg-purple-50 text-purple-600"
           onClick={() => setStatPopup('products')}
-        />
-        <StatCard
-          title="Rata-rata / Transaksi"
-          value={formatRupiah(avgPerTransaction)}
-          icon={<BarChart3 className="h-4 w-4 sm:h-5 sm:w-5" />}
-          accentClass="text-teal-600"
-          iconBgClass="bg-teal-50 text-teal-600"
-          onClick={() => setStatPopup('average')}
         />
       </div>
       )}
@@ -586,13 +571,11 @@ export default function DashboardPage() {
               {statPopup === 'sales' && '📈 Penjualan Hari Ini'}
               {statPopup === 'transactions' && '🛒 Detail Total Transaksi'}
               {statPopup === 'products' && '📦 Detail Produk Terjual'}
-              {statPopup === 'average' && '📊 Rata-rata per Transaksi'}
             </DialogTitle>
             <DialogDescription>
               {statPopup === 'sales' && 'Ringkasan penjualan toko hari ini'}
               {statPopup === 'transactions' && 'Daftar semua transaksi hari ini'}
               {statPopup === 'products' && 'Daftar produk yang terjual hari ini'}
-              {statPopup === 'average' && 'Analisis rata-rata nilai per transaksi'}
             </DialogDescription>
           </DialogHeader>
 
@@ -612,10 +595,7 @@ export default function DashboardPage() {
                   <p className="text-xs text-purple-600 font-medium">Produk Terjual</p>
                   <p className="text-xl font-bold text-purple-700 mt-1">{dashboard.todayProducts}</p>
                 </div>
-                <div className="rounded-xl bg-teal-50 p-4 text-center">
-                  <p className="text-xs text-teal-600 font-medium">Rata-rata / Transaksi</p>
-                  <p className="text-xl font-bold text-teal-700 mt-1">{formatRupiah(avgPerTransaction)}</p>
-                </div>
+
               </div>
               {dashboard.bestSellers.length > 0 && (
                 <div>
@@ -696,39 +676,6 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Rata-rata / Transaksi */}
-          {statPopup === 'average' && (
-            <div className="space-y-4 pt-2">
-              <div className="rounded-xl bg-teal-50 p-4 text-center">
-                <p className="text-xs text-teal-600 font-medium">Rata-rata per Transaksi</p>
-                <p className="text-2xl font-bold text-teal-700 mt-1">{formatRupiah(avgPerTransaction)}</p>
-                <p className="text-[11px] text-teal-500 mt-1">{dashboard.todayTransactions} transaksi hari ini</p>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground mb-2">Distribusi Penjualan</p>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between rounded-lg border px-3 py-2.5">
-                    <span className="text-sm">Total Penjualan</span>
-                    <span className="text-sm font-bold text-emerald-600">{formatRupiah(dashboard.todaySales)}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border px-3 py-2.5">
-                    <span className="text-sm">Jumlah Transaksi</span>
-                    <span className="text-sm font-bold text-blue-600">{dashboard.todayTransactions}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border px-3 py-2.5">
-                    <span className="text-sm">Produk Terjual</span>
-                    <span className="text-sm font-bold text-purple-600">{dashboard.todayProducts}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border px-3 py-2.5">
-                    <span className="text-sm">Rata-rata Produk/Tx</span>
-                    <span className="text-sm font-bold text-amber-600">
-                      {dashboard.todayTransactions > 0 ? (dashboard.todayProducts / dashboard.todayTransactions).toFixed(1) : '0'} pcs
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
     </div>
